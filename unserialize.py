@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 import phpserialize
+import html
 
 def flatten_dictionary(data, prefix=''):
     flattened = {}
@@ -8,7 +9,15 @@ def flatten_dictionary(data, prefix=''):
         if isinstance(key, bytes):
             key = key.decode('utf-8')
 
-        if isinstance(value, dict):
+        if '_horarios_' in prefix and key.endswith('dias'):
+            serialized_value = 'a:{}:{{'.format(len(value))
+            for i, (k, v) in enumerate(value.items()):
+                if isinstance(k, bytes):
+                    k = k.decode('utf-8')
+                serialized_value += 'i:{};s:{}:"{}";'.format(i,len(k), k)
+            serialized_value += '}'
+            flattened[f"{prefix}_dias"] = serialized_value
+        elif isinstance(value, dict):
             flattened.update(flatten_dictionary(value, f"{prefix}_{key}"))
         elif isinstance(value, bytes):
             # Decode the value if it's in byte format
@@ -75,9 +84,9 @@ namespaces = {
 for item_element in root.findall('.//item', namespaces):
     unserialize_data(item_element)
 
-print("Final result after processing All Items:")
-for key, value in unserialized_data_per_item.items():
-    print(f"\n\n==> {key}: {value}")
+#print("Final result after processing All Items:")
+#for key, value in unserialized_data_per_item.items():
+#    print(f"\n\n==> {key}: {value}")
 
 print(f"Number of items: {len(unserialized_data_per_item)}")
 
@@ -86,3 +95,28 @@ print(f"Number of items: {len(unserialized_data_per_item)}")
 # NOTE: Some items may come with an URL as key, but the data is preserved anyways
 
 # TODO: save data on xml file for wordpress import
+
+# Generate Wordpress import XML file
+wordpress_xml = ET.Element('wordpress')
+items_element = ET.SubElement(wordpress_xml, 'items')
+
+for key, value in unserialized_data_per_item.items():
+    if any('@type' in k for k in value.keys()):
+        value = {k.replace('@', ''): v for k, v in value.items()}
+    item_element = ET.SubElement(items_element, 'item')
+    for k, v in value.items():
+        if isinstance(v, int):
+            v = str(v)
+        if isinstance(v, dict):
+            sub_element = ET.SubElement(item_element, k)
+            sub_element.text = str(v)
+        else:
+            if k.startswith('_'):
+                k = k[1:]
+            sub_element = ET.SubElement(item_element, k)
+            sub_element.text = html.escape(v)
+
+# Write XML file
+ET.ElementTree(wordpress_xml).write('wordpress_import.xml', encoding='utf-8', xml_declaration=True)
+
+print("Wordpress import XML file created successfully!")
