@@ -9,6 +9,9 @@ def flatten_dictionary(data, prefix=''):
         if isinstance(key, bytes):
             key = key.decode('utf-8')
 
+        if prefix.startswith('_'):
+            prefix = prefix[1:]
+
         if '_horarios_' in prefix and key.endswith('dias'):
             serialized_value = 'a:{}:{{'.format(len(value))
             for i, (k, v) in enumerate(value.items()):
@@ -22,9 +25,15 @@ def flatten_dictionary(data, prefix=''):
         elif isinstance(value, bytes):
             # Decode the value if it's in byte format
             value = value.decode('utf-8')
-            flattened[f"{prefix}_{key}"] = value
+            if prefix != '':
+                flattened[f"{prefix}_{key}"] = value
+            else:
+                flattened[key] = value
         else:
-            flattened[f"{prefix}_{key}"] = value
+            if prefix != '':
+                flattened[f"{prefix}_{key}"] = value
+            else:
+                flattened[key] = value
     return flattened
 
 def unserialize_data(item_element):
@@ -32,37 +41,31 @@ def unserialize_data(item_element):
         post_id_element = item_element.find('ns3:post_id', namespaces)
         if post_id_element is not None:
             post_id = post_id_element.text.strip()
-    
-            postmeta_data = {} 
+
+            postmeta_data = {}
             for child in item_element:
                 if child.tag.endswith('postmeta'):
                     meta_key_element = child.find('ns3:meta_key', namespaces)
                     meta_value_element = child.find('ns3:meta_value', namespaces)
-    
+
                     if meta_key_element is not None and meta_value_element is not None:
                         meta_key = meta_key_element.text.strip()
-                        
-                        # Check if meta_value_element.text is not None before accessing its value
-                        if meta_value_element.text is not None:
-                            meta_value = meta_value_element.text.strip()
-            
-                            # Check if the meta_value is serialized
-                            if meta_value.startswith('a:') or meta_value.startswith('O:'):
-                                # Unserialize the data
-                                unserialized_value = phpserialize.loads(meta_value.encode('utf-8'))
-                                # Store the unserialized data directly
-                                postmeta_data[meta_key] = unserialized_value
+
+                        if meta_key == 'locais':
+                            # Check if meta_value_element.text is not None before accessing its value
+                            if meta_value_element.text is not None:
+                                meta_value = meta_value_element.text.strip()
+                                # Check if the meta_value is serialized
+                                if meta_value.startswith('a:') or meta_value.startswith('O:'):
+                                    # Unserialize the data
+                                    unserialized_value = phpserialize.loads(meta_value.encode('utf-8'))
+                                    # Store the unserialized data directly
+                                    postmeta_data[meta_key] = unserialized_value
+                                else:
+                                    postmeta_data[meta_key] = meta_value
                             else:
-                                postmeta_data[meta_key] = meta_value
-                        else:
-                            # If meta_value_element.text is None, set the value as an empty string
-                            postmeta_data[meta_key] = ""
-                else:
-                    meta_key = child.tag
-                    if child.text is not None:
-                        postmeta_data[meta_key] = child.text.strip()
-                    else:
-                        postmeta_data[meta_key] = ""
+                                # If meta_value_element.text is None, set the value as an empty string
+                                postmeta_data[meta_key] = ""
 
 
             postmeta_data = flatten_dictionary(postmeta_data)
@@ -80,7 +83,8 @@ namespaces = {
 }
 
 # Get the first <item> element
-#first_item = root.find('.//item')
+# first_item = root.find('.//item')
+# unserialize_data(first_item)
 for item_element in root.findall('.//item', namespaces):
     unserialize_data(item_element)
 
@@ -88,7 +92,7 @@ for item_element in root.findall('.//item', namespaces):
 #for key, value in unserialized_data_per_item.items():
 #    print(f"\n\n==> {key}: {value}")
 
-print(f"Number of items: {len(unserialized_data_per_item)}")
+#print(f"Number of items: {len(unserialized_data_per_item)}")
 
 # NOTE: This code does indeed takes all items, but nothing other than that
 
@@ -119,4 +123,4 @@ for key, value in unserialized_data_per_item.items():
 # Write XML file
 ET.ElementTree(wordpress_xml).write('wordpress_import.xml', encoding='utf-8', xml_declaration=True)
 
-print("Wordpress import XML file created successfully!")
+#print("Wordpress import XML file created successfully!")
